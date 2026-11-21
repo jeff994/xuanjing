@@ -703,12 +703,14 @@ function EpubBookReader({
   const renditionRef = useRef<any>(null);
   const toggleFullscreenRef = useRef(onToggleFullscreen);
   const exitFullscreenRef = useRef(onExitFullscreen);
+  const fontSizeRef = useRef(fontSize);
   const [pageNumber, setPageNumber] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
   toggleFullscreenRef.current = onToggleFullscreen;
   exitFullscreenRef.current = onExitFullscreen;
+  fontSizeRef.current = fontSize;
 
   const isDouble = pageLayout === 'double';
 
@@ -745,7 +747,7 @@ function EpubBookReader({
           spread: isDouble ? 'always' : 'none',
         });
         renditionRef.current = rendition;
-        rendition.themes.fontSize(`${fontSize}px`);
+        rendition.themes.fontSize(`${fontSizeRef.current}px`);
 
         // Handle keyboard navigation even when focus is inside the EPUB iframe
         rendition.on('keydown', (e: KeyboardEvent) => {
