@@ -68,6 +68,13 @@ export const api = {
     return request<{ providers: OAuthProviderInfo[] }>('/api/auth/providers');
   },
 
+  linkOAuthAccount(payload: { linkToken: string; password?: string }) {
+    return request<{ user: User; token: string; next: string }>('/api/auth/oauth/link', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
   // Books
   listBooks(search?: string) {
     const query = search?.trim() ? `?q=${encodeURIComponent(search.trim())}` : '';

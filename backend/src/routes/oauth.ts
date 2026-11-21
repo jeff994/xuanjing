@@ -1,5 +1,7 @@
+import bcrypt from 'bcryptjs';
 import crypto from 'node:crypto';
 import { FastifyInstance } from 'fastify';
+import { z } from 'zod';
 import { config } from '../config.js';
 import { db } from '../db/index.js';
 
@@ -14,12 +16,24 @@ interface OAuthProfile {
 }
 
 interface OAuthStatePayload {
+  purpose: 'oauth_state';
   oauthProvider: OAuthProvider;
   nonce: string;
   next: string;
 }
 
+interface OAuthLinkTokenPayload {
+  purpose: 'oauth_link';
+  profile: OAuthProfile;
+  next: string;
+}
+
 const VALID_PROVIDERS = new Set<OAuthProvider>(['google', 'wechat', 'facebook']);
+
+const linkAccountSchema = z.object({
+  linkToken: z.string().min(1, 'Missing link token'),
+  password: z.string().min(1).optional(),
+});
 
 function isValidProvider(value: string): value is OAuthProvider {
   return VALID_PROVIDERS.has(value as OAuthProvider);
@@ -107,6 +121,7 @@ async function exchangeGoogleProfile(code: string): Promise<OAuthProfile> {
   const profile = (await profileRes.json()) as {
     sub?: string;
     email?: string;
+    email_verified?: boolean;
     name?: string;
     picture?: string;
   };
@@ -115,11 +130,13 @@ async function exchangeGoogleProfile(code: string): Promise<OAuthProfile> {
     throw new Error('Failed to fetch Google user profile');
   }
 
+  const verifiedEmail = profile.email_verified === true ? profile.email?.trim().toLowerCase() || null : null;
+
   return {
     provider: 'google',
     providerUserId: profile.sub,
-    email: profile.email?.trim().toLowerCase() || null,
-    displayName: profile.name?.trim() || profile.email?.split('@')[0] || 'Google User',
+    email: verifiedEmail,
+    displayName: profile.name?.trim() || verifiedEmail?.split('@')[0] || 'Google User',
     avatarUrl: profile.picture || null,
   };
 }
@@ -245,8 +262,12 @@ async function generateUniqueUsername(baseName: string): Promise<string> {
   return `user_${crypto.randomBytes(6).toString('hex')}`;
 }
 
-async function findOrCreateOAuthUser(profile: OAuthProfile): Promise<{ id: number; username: string; email: string }> {
-  // 1. Existing linked OAuth account
+type OAuthResolveResult =
+  | { status: 'authenticated'; user: { id: number; username: string; email: string } }
+  | { status: 'link_required'; hasPassword: boolean };
+
+async function resolveOAuthUser(profile: OAuthProfile): Promise<OAuthResolveResult> {
+  // 1. Existing linked OAuth account (already explicitly associated with this provider identity)
   const existingLink = await db('oauth_accounts')
     .where({ provider: profile.provider, provider_user_id: profile.providerUserId })
     .first();
@@ -262,37 +283,45 @@ async function findOrCreateOAuthUser(profile: OAuthProfile): Promise<{ id: numbe
           email: profile.email,
         });
       return {
-        id: Number(userRow.id),
-        username: userRow.username as string,
-        email: userRow.email as string,
+        status: 'authenticated',
+        user: {
+          id: Number(userRow.id),
+          username: userRow.username as string,
+          email: userRow.email as string,
+        },
       };
     }
   }
 
-  // 2. Match existing user by email if the provider returned one
-  let userRow = profile.email ? await db('users').where({ email: profile.email }).first() : undefined;
-
-  // 3. Otherwise create a new user account
-  if (!userRow) {
-    const username = await generateUniqueUsername(profile.displayName || profile.email?.split('@')[0] || profile.provider);
-    const email =
-      profile.email ||
-      `${profile.provider}_${crypto.createHash('sha256').update(profile.providerUserId).digest('hex').slice(0, 16)}@oauth.local`;
-
-    const inserted = await db('users')
-      .insert({
-        username,
-        email,
-        password_hash: `oauth:${profile.provider}:${crypto.randomUUID()}`,
-      })
-      .returning('id');
-
-    const userId = extractId(inserted);
-    userRow = { id: userId, username, email };
+  // 2. If an account with this email already exists, NEVER auto-link without proving ownership.
+  //    Prevents pre-account takeover where an attacker registers a victim's email before the victim uses OAuth.
+  if (profile.email) {
+    const existingEmailUser = await db('users').where({ email: profile.email }).first();
+    if (existingEmailUser) {
+      const hasPassword =
+        typeof existingEmailUser.password_hash === 'string' && !existingEmailUser.password_hash.startsWith('oauth:');
+      return { status: 'link_required', hasPassword };
+    }
   }
 
+  // 3. No conflicting account exists — create a new OAuth user account
+  const username = await generateUniqueUsername(profile.displayName || profile.email?.split('@')[0] || profile.provider);
+  const email =
+    profile.email ||
+    `${profile.provider}_${crypto.createHash('sha256').update(profile.providerUserId).digest('hex').slice(0, 16)}@oauth.local`;
+
+  const inserted = await db('users')
+    .insert({
+      username,
+      email,
+      password_hash: `oauth:${profile.provider}:${crypto.randomUUID()}`,
+    })
+    .returning('id');
+
+  const userId = extractId(inserted);
+
   await db('oauth_accounts').insert({
-    user_id: Number(userRow.id),
+    user_id: userId,
     provider: profile.provider,
     provider_user_id: profile.providerUserId,
     email: profile.email,
@@ -301,9 +330,8 @@ async function findOrCreateOAuthUser(profile: OAuthProfile): Promise<{ id: numbe
   });
 
   return {
-    id: Number(userRow.id),
-    username: userRow.username as string,
-    email: userRow.email as string,
+    status: 'authenticated',
+    user: { id: userId, username, email },
   };
 }
 
@@ -336,6 +364,7 @@ export async function oauthRoutes(app: FastifyInstance): Promise<void> {
     // Stateless signed JWT state token — safe across multiple load-balanced API replicas
     const state = app.jwt.sign(
       {
+        purpose: 'oauth_state',
         oauthProvider: provider,
         nonce: crypto.randomUUID(),
         next: sanitizeNextPath(next),
@@ -379,7 +408,7 @@ export async function oauthRoutes(app: FastifyInstance): Promise<void> {
       return redirectWithError('OAuth session expired or invalid state. Please try signing in again.');
     }
 
-    if (statePayload.oauthProvider !== provider) {
+    if (statePayload.purpose !== 'oauth_state' || statePayload.oauthProvider !== provider) {
       return redirectWithError('OAuth provider mismatch');
     }
 
@@ -391,11 +420,30 @@ export async function oauthRoutes(app: FastifyInstance): Promise<void> {
             ? await exchangeWeChatProfile(code)
             : await exchangeFacebookProfile(code);
 
-      const user = await findOrCreateOAuthUser(profile);
-      const token = app.jwt.sign(user);
+      const resolved = await resolveOAuthUser(profile);
       const next = sanitizeNextPath(statePayload.next);
 
-      // Pass JWT via URL fragment (#) so it is never sent to servers or Referer headers
+      if (resolved.status === 'link_required') {
+        const linkToken = app.jwt.sign(
+          {
+            purpose: 'oauth_link',
+            profile,
+            next,
+          } as unknown as Parameters<typeof app.jwt.sign>[0],
+          { expiresIn: '10m' }
+        );
+
+        const fragment = new URLSearchParams({
+          linkToken,
+          provider: profile.provider,
+          email: profile.email ?? '',
+          hasPassword: resolved.hasPassword ? '1' : '0',
+        }).toString();
+
+        return reply.redirect(`${config.frontendUrl}/oauth/link#${fragment}`);
+      }
+
+      const token = app.jwt.sign(resolved.user);
       const fragment = new URLSearchParams({ token, next }).toString();
       return reply.redirect(`${config.frontendUrl}/oauth/callback#${fragment}`);
     } catch (err) {
@@ -403,5 +451,91 @@ export async function oauthRoutes(app: FastifyInstance): Promise<void> {
       const message = err instanceof Error ? err.message : `${provider} sign-in failed`;
       return redirectWithError(message);
     }
+  });
+
+  // Explicit ownership-verified linking endpoint:
+  // Links a pending OAuth identity to an existing account ONLY after proving ownership via
+  // either (a) the existing account's password, or (b) an active Bearer JWT for that same user.
+  app.post('/api/auth/oauth/link', async (request, reply) => {
+    const parsed = linkAccountSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ error: parsed.error.issues[0]?.message ?? 'Invalid request' });
+    }
+
+    let payload: OAuthLinkTokenPayload;
+    try {
+      payload = app.jwt.verify<OAuthLinkTokenPayload>(parsed.data.linkToken);
+    } catch {
+      return reply.code(400).send({ error: 'Link session expired or invalid. Please sign in with your provider again.' });
+    }
+
+    if (payload.purpose !== 'oauth_link' || !payload.profile?.email || !isValidProvider(payload.profile.provider)) {
+      return reply.code(400).send({ error: 'Invalid link token' });
+    }
+
+    const existingUser = await db('users').where({ email: payload.profile.email }).first();
+    if (!existingUser) {
+      return reply.code(404).send({ error: 'Account no longer exists. Please try signing in again.' });
+    }
+
+    // Proof of ownership check: either matching authenticated JWT OR valid password for existingUser
+    let ownershipVerified = false;
+
+    if (request.headers.authorization?.startsWith('Bearer ')) {
+      try {
+        await request.jwtVerify();
+        if (request.user && request.user.id === Number(existingUser.id)) {
+          ownershipVerified = true;
+        }
+      } catch {
+        // Fall through to password check if provided
+      }
+    }
+
+    if (!ownershipVerified && parsed.data.password) {
+      const hasPassword =
+        typeof existingUser.password_hash === 'string' && !existingUser.password_hash.startsWith('oauth:');
+      if (hasPassword && (await bcrypt.compare(parsed.data.password, existingUser.password_hash))) {
+        ownershipVerified = true;
+      }
+    }
+
+    if (!ownershipVerified) {
+      return reply.code(401).send({
+        error: 'Ownership verification failed. Please enter the correct password for the existing account.',
+      });
+    }
+
+    // Ensure this provider identity isn't already linked to a different user
+    const existingLink = await db('oauth_accounts')
+      .where({
+        provider: payload.profile.provider,
+        provider_user_id: payload.profile.providerUserId,
+      })
+      .first();
+
+    if (existingLink && Number(existingLink.user_id) !== Number(existingUser.id)) {
+      return reply.code(409).send({ error: 'This social account is already linked to another user.' });
+    }
+
+    if (!existingLink) {
+      await db('oauth_accounts').insert({
+        user_id: Number(existingUser.id),
+        provider: payload.profile.provider,
+        provider_user_id: payload.profile.providerUserId,
+        email: payload.profile.email,
+        display_name: payload.profile.displayName,
+        avatar_url: payload.profile.avatarUrl,
+      });
+    }
+
+    const user = {
+      id: Number(existingUser.id),
+      username: existingUser.username as string,
+      email: existingUser.email as string,
+    };
+    const token = app.jwt.sign(user);
+
+    return reply.send({ user, token, next: sanitizeNextPath(payload.next) });
   });
 }
