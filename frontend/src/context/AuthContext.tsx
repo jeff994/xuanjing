@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { api, getStoredToken, setStoredToken } from '../api/client';
 import { User } from '../types';
 
@@ -7,6 +7,7 @@ interface AuthContextValue {
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
   register: (username: string, email: string, password: string) => Promise<void>;
+  loginWithToken: (token: string) => Promise<void>;
   logout: () => void;
 }
 
@@ -44,13 +45,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(res.user);
   };
 
+  const loginWithToken = useCallback(async (token: string) => {
+    setStoredToken(token);
+    try {
+      const res = await api.me();
+      setUser(res.user);
+    } catch (err) {
+      setStoredToken(null);
+      setUser(null);
+      throw err;
+    }
+  }, []);
+
   const logout = () => {
     setStoredToken(null);
     setUser(null);
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, logout }}>
+    <AuthContext.Provider value={{ user, loading, login, register, loginWithToken, logout }}>
       {children}
     </AuthContext.Provider>
   );

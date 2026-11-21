@@ -8,6 +8,7 @@ import { authRoutes } from './routes/auth.js';
 import { bookRoutes } from './routes/books.js';
 import { commentRoutes } from './routes/comments.js';
 import { healthRoutes } from './routes/health.js';
+import { oauthRoutes } from './routes/oauth.js';
 import { storage } from './storage/index.js';
 
 async function start() {
@@ -42,6 +43,7 @@ async function start() {
 
   await app.register(healthRoutes);
   await app.register(authRoutes);
+  await app.register(oauthRoutes);
   await app.register(bookRoutes);
   await app.register(commentRoutes);
 

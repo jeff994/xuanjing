@@ -5,6 +5,7 @@ import { AuthProvider } from './context/AuthContext';
 import { BookDetailPage } from './pages/BookDetailPage';
 import { HomePage } from './pages/HomePage';
 import { LoginPage } from './pages/LoginPage';
+import { OAuthCallbackPage } from './pages/OAuthCallbackPage';
 import { RegisterPage } from './pages/RegisterPage';
 import { UploadBookPage } from './pages/UploadBookPage';
 
@@ -28,6 +29,7 @@ export function App() {
               />
               <Route path="/login" element={<LoginPage />} />
               <Route path="/register" element={<RegisterPage />} />
+              <Route path="/oauth/callback" element={<OAuthCallbackPage />} />
             </Routes>
           </main>
         </div>

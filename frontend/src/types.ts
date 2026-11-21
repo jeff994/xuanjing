@@ -28,3 +28,9 @@ export interface Comment {
   content: string;
   createdAt: string;
 }
+
+export interface OAuthProviderInfo {
+  id: 'google' | 'wechat' | 'facebook';
+  name: string;
+  enabled: boolean;
+}

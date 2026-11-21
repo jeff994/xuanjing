@@ -1,5 +1,6 @@
 import { FormEvent, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { SocialLoginButtons } from '../components/SocialLoginButtons';
 import { useAuth } from '../context/AuthContext';
 
 export function RegisterPage() {
@@ -82,6 +83,8 @@ export function RegisterPage() {
             {submitting ? 'Creating account...' : 'Create account'}
           </button>
         </form>
+
+        <SocialLoginButtons />
 
         <p className="mt-6 text-center text-sm text-slate-600">
           Already have an account?{' '}

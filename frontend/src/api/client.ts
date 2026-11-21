@@ -1,4 +1,4 @@
-import { Book, Comment, User } from '../types';
+import { Book, Comment, OAuthProviderInfo, User } from '../types';
 
 const TOKEN_KEY = 'book_portal_jwt';
 
@@ -62,6 +62,10 @@ export const api = {
 
   me() {
     return request<{ user: User }>('/api/auth/me');
+  },
+
+  listAuthProviders() {
+    return request<{ providers: OAuthProviderInfo[] }>('/api/auth/providers');
   },
 
   // Books
