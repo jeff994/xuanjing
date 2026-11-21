@@ -6,6 +6,7 @@ A stateless, horizontally scalable book portal built with **React + Vite + TypeS
 - **User Authentication:** Register, sign in, stateless JWT authentication (`POST /api/auth/register`, `POST /api/auth/login`, `GET /api/auth/me`), and stateless OAuth 2.0 social login (**Google/Gmail**, **WeChat**, **Facebook**)
 - **Book Uploads & Downloads:** Upload books (`.pdf`, `.epub`, `.txt`, `.md`, `.mobi`) with optional cover images, search/browse catalog, download files, and delete own uploads
 - **Comments:** View, post, and delete comments on any book
+- **Multi-Language (i18n):** Instant language switcher in the navbar supporting **English**, **简体中文**, **Español**, **日本語**, and **Français** with automatic browser detection and `localStorage` persistence
 - **Load-Balancer Ready:**
   - Stateless JWT auth & signed JWT OAuth `state` tokens (no sticky sessions required)
   - Pluggable storage (`local` for single-node dev, `s3` for AWS S3 / Cloudflare R2 / MinIO in multi-replica prod)
