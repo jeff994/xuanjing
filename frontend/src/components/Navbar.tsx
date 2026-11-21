@@ -32,19 +32,19 @@ export function Navbar() {
                 to="/upload"
                 className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3.5 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-indigo-700"
               >
-                <Upload className="h-4 w-4" />
-                <span className="hidden sm:inline">{t('nav.uploadBook')}</span>
+                <Upload className="h-4 w-4" aria-hidden="true" />
+                <span className="sr-only sm:not-sr-only">{t('nav.uploadBook')}</span>
               </Link>
               <div className="hidden items-center gap-2 rounded-lg bg-slate-100 px-3 py-1.5 text-sm text-slate-700 md:flex">
-                <UserIcon className="h-4 w-4 text-slate-500" />
+                <UserIcon className="h-4 w-4 text-slate-500" aria-hidden="true" />
                 <span className="font-medium">{user.username}</span>
               </div>
               <button
                 onClick={handleLogout}
                 className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100"
               >
-                <LogOut className="h-4 w-4" />
-                <span className="hidden sm:inline">{t('nav.signOut')}</span>
+                <LogOut className="h-4 w-4" aria-hidden="true" />
+                <span className="sr-only sm:not-sr-only">{t('nav.signOut')}</span>
               </button>
             </>
           ) : (
