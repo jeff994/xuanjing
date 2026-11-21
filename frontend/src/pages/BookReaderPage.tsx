@@ -333,6 +333,7 @@ function PdfBookReader({ book, contentUrl, isFullscreen, pageLayout, onToggleLay
   const fullscreenScrollRef = useRef<HTMLDivElement | null>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const pdfDocRef = useRef<any>(null);
+  const activeRenderTasksRef = useRef<Array<{ cancel: () => void; promise: Promise<void> }>>([]);
   const prevPageRef = useRef<number | null>(null);
 
   const [totalPages, setTotalPages] = useState(0);
@@ -400,10 +401,20 @@ function PdfBookReader({ book, contentUrl, isFullscreen, pageLayout, onToggleLay
     setRendering(true);
     saveProgress(book.id, currentPage);
 
+    // Cancel any in-flight PDF.js render tasks before reusing the shared canvases
+    const previousTasks = activeRenderTasksRef.current;
+    activeRenderTasksRef.current = [];
+    for (const task of previousTasks) {
+      task.cancel();
+    }
+
     const renderPageToCanvas = async (pageNum: number, canvas: HTMLCanvasElement, columns: number) => {
       const page = (await doc.getPage(pageNum)) as {
         getViewport: (opts: { scale: number }) => { width: number; height: number };
-        render: (opts: { canvasContext: CanvasRenderingContext2D; viewport: unknown }) => { promise: Promise<void> };
+        render: (opts: { canvasContext: CanvasRenderingContext2D; viewport: unknown }) => {
+          cancel: () => void;
+          promise: Promise<void>;
+        };
       };
       if (cancelled) return;
 
@@ -429,18 +440,31 @@ function PdfBookReader({ book, contentUrl, isFullscreen, pageLayout, onToggleLay
 
       const ctx = canvas.getContext('2d');
       if (!ctx) return;
-      await page.render({ canvasContext: ctx, viewport: scaledViewport }).promise;
+
+      const renderTask = page.render({ canvasContext: ctx, viewport: scaledViewport });
+      activeRenderTasksRef.current.push(renderTask);
+      await renderTask.promise;
     };
 
-    const columns = hasRightPage ? 2 : 1;
-    const tasks: Promise<void>[] = [renderPageToCanvas(currentPage, leftCanvas, columns)];
-    if (hasRightPage && rightCanvasRef.current) {
-      tasks.push(renderPageToCanvas(currentPage + 1, rightCanvasRef.current, columns));
-    }
+    const runRender = async () => {
+      if (previousTasks.length > 0) {
+        await Promise.allSettled(previousTasks.map((task) => task.promise));
+      }
+      if (cancelled) return;
 
-    Promise.all(tasks)
+      const columns = hasRightPage ? 2 : 1;
+      const tasks: Promise<void>[] = [renderPageToCanvas(currentPage, leftCanvas, columns)];
+      if (hasRightPage && rightCanvasRef.current) {
+        tasks.push(renderPageToCanvas(currentPage + 1, rightCanvasRef.current, columns));
+      }
+      await Promise.all(tasks);
+    };
+
+    runRender()
       .catch((err: unknown) => {
-        if (!cancelled) {
+        const isCancelledError =
+          typeof err === 'object' && err !== null && 'name' in err && err.name === 'RenderingCancelledException';
+        if (!cancelled && !isCancelledError) {
           setError(err instanceof Error ? err.message : t('reader.loadError'));
         }
       })
@@ -450,6 +474,9 @@ function PdfBookReader({ book, contentUrl, isFullscreen, pageLayout, onToggleLay
 
     return () => {
       cancelled = true;
+      for (const task of activeRenderTasksRef.current) {
+        task.cancel();
+      }
     };
   }, [book.id, currentPage, scale, totalPages, isFullscreen, hasRightPage, t]);
 
@@ -656,18 +683,42 @@ interface EpubReaderProps {
   isFullscreen: boolean;
   pageLayout: PageLayout;
   onToggleLayout: () => void;
+  onToggleFullscreen: () => void;
+  onExitFullscreen: () => void;
 }
 
-function EpubBookReader({ book, contentUrl, fontSize, isFullscreen, pageLayout, onToggleLayout }: EpubReaderProps) {
+function EpubBookReader({
+  book,
+  contentUrl,
+  fontSize,
+  isFullscreen,
+  pageLayout,
+  onToggleLayout,
+  onToggleFullscreen,
+  onExitFullscreen,
+}: EpubReaderProps) {
   const { t } = useLanguage();
   const containerRef = useRef<HTMLDivElement | null>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const renditionRef = useRef<any>(null);
+  const toggleFullscreenRef = useRef(onToggleFullscreen);
+  const exitFullscreenRef = useRef(onExitFullscreen);
   const [pageNumber, setPageNumber] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
+  toggleFullscreenRef.current = onToggleFullscreen;
+  exitFullscreenRef.current = onExitFullscreen;
+
   const isDouble = pageLayout === 'double';
+
+  const goPrev = useCallback(() => {
+    void renditionRef.current?.prev();
+  }, []);
+
+  const goNext = useCallback(() => {
+    void renditionRef.current?.next();
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -695,6 +746,22 @@ function EpubBookReader({ book, contentUrl, fontSize, isFullscreen, pageLayout, 
         });
         renditionRef.current = rendition;
         rendition.themes.fontSize(`${fontSize}px`);
+
+        // Handle keyboard navigation even when focus is inside the EPUB iframe
+        rendition.on('keydown', (e: KeyboardEvent) => {
+          if (e.key === 'ArrowLeft') {
+            e.preventDefault();
+            void rendition.prev();
+          } else if (e.key === 'ArrowRight') {
+            e.preventDefault();
+            void rendition.next();
+          } else if (e.key === 'f' || e.key === 'F') {
+            e.preventDefault();
+            toggleFullscreenRef.current();
+          } else if (e.key === 'Escape') {
+            exitFullscreenRef.current();
+          }
+        });
 
         rendition.on('relocated', (location: { start?: { cfi?: string; displayed?: { page?: number } } }) => {
           if (location.start?.cfi) {
@@ -740,14 +807,6 @@ function EpubBookReader({ book, contentUrl, fontSize, isFullscreen, pageLayout, 
       renditionRef.current.themes.fontSize(`${fontSize}px`);
     }
   }, [fontSize]);
-
-  const goPrev = useCallback(() => {
-    void renditionRef.current?.prev();
-  }, []);
-
-  const goNext = useCallback(() => {
-    void renditionRef.current?.next();
-  }, []);
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -1112,6 +1171,14 @@ export function BookReaderPage() {
             isFullscreen={isFullscreen}
             pageLayout={pageLayout}
             onToggleLayout={toggleLayout}
+            onToggleFullscreen={() => void toggleFullscreen()}
+            onExitFullscreen={() => {
+              if (document.fullscreenElement) {
+                void document.exitFullscreen();
+              } else {
+                setIsFullscreen(false);
+              }
+            }}
           />
         )}
         {format === 'unsupported' && (

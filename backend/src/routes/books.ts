@@ -19,13 +19,14 @@ function sanitizeFilename(name: string): string {
   return path.basename(name).replace(/[^a-zA-Z0-9._-]/g, '_');
 }
 
-function resolveInlineContentType(fileName: string, fallbackMime?: string): string {
+function resolveTrustedContentType(fileName: string): { contentType: string; inlineAllowed: boolean } {
   const ext = path.extname(fileName).toLowerCase();
-  if (ext === '.pdf') return 'application/pdf';
-  if (ext === '.epub') return 'application/epub+zip';
-  if (ext === '.txt') return 'text/plain; charset=utf-8';
-  if (ext === '.md') return 'text/markdown; charset=utf-8';
-  return fallbackMime || 'application/octet-stream';
+  if (ext === '.pdf') return { contentType: 'application/pdf', inlineAllowed: true };
+  if (ext === '.epub') return { contentType: 'application/epub+zip', inlineAllowed: true };
+  if (ext === '.txt') return { contentType: 'text/plain; charset=utf-8', inlineAllowed: true };
+  if (ext === '.md') return { contentType: 'text/markdown; charset=utf-8', inlineAllowed: true };
+  if (ext === '.mobi') return { contentType: 'application/x-mobipocket-ebook', inlineAllowed: false };
+  return { contentType: 'application/octet-stream', inlineAllowed: false };
 }
 
 export async function bookRoutes(app: FastifyInstance): Promise<void> {
@@ -240,8 +241,13 @@ export async function bookRoutes(app: FastifyInstance): Promise<void> {
 
     try {
       const stream = await storage.getStream(book.file_key);
-      reply.header('Content-Type', resolveInlineContentType(book.file_name, book.file_mime));
-      reply.header('Content-Disposition', `inline; filename="${book.file_name}"`);
+      const { contentType, inlineAllowed } = resolveTrustedContentType(book.file_name);
+      reply.header('Content-Type', contentType);
+      reply.header('X-Content-Type-Options', 'nosniff');
+      reply.header(
+        'Content-Disposition',
+        `${inlineAllowed ? 'inline' : 'attachment'}; filename="${book.file_name}"`
+      );
       reply.header('Cache-Control', 'private, max-age=3600');
       return reply.send(stream);
     } catch {
@@ -259,7 +265,9 @@ export async function bookRoutes(app: FastifyInstance): Promise<void> {
 
     try {
       const stream = await storage.getStream(book.file_key);
-      reply.header('Content-Type', book.file_mime || 'application/octet-stream');
+      const { contentType } = resolveTrustedContentType(book.file_name);
+      reply.header('Content-Type', contentType);
+      reply.header('X-Content-Type-Options', 'nosniff');
       reply.header('Content-Disposition', `attachment; filename="${book.file_name}"`);
       return reply.send(stream);
     } catch {

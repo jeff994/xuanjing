@@ -156,7 +156,30 @@ describe('Book Portal REST API', () => {
     assert.equal(contentRes.status, 200);
     assert.match(contentRes.headers.get('content-disposition') ?? '', /^inline;/);
     assert.match(contentRes.headers.get('content-type') ?? '', /^text\/plain/);
+    assert.equal(contentRes.headers.get('x-content-type-options'), 'nosniff');
     assert.equal(await contentRes.text(), 'Chapter 1: Reliable Systems');
+
+    // Spoofed text/html MIME on .mobi must NEVER be served inline as text/html
+    const spoofForm = new FormData();
+    spoofForm.append('title', 'Spoofed Mobi');
+    spoofForm.append('author', 'Tester');
+    spoofForm.append('bookFile', new Blob(['<script>alert(1)</script>'], { type: 'text/html' }), 'evil.mobi');
+    const spoofUpload = await fetch(`${BASE_URL}/api/books`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${alice.token}` },
+      body: spoofForm,
+    });
+    assert.equal(spoofUpload.status, 201);
+    const { book: spoofBook } = (await spoofUpload.json()) as { book: { id: number } };
+    const spoofContent = await fetch(`${BASE_URL}/api/books/${spoofBook.id}/content`);
+    assert.equal(spoofContent.status, 200);
+    assert.equal(spoofContent.headers.get('content-type'), 'application/x-mobipocket-ebook');
+    assert.equal(spoofContent.headers.get('x-content-type-options'), 'nosniff');
+    assert.match(spoofContent.headers.get('content-disposition') ?? '', /^attachment;/);
+    await fetch(`${BASE_URL}/api/books/${spoofBook.id}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${alice.token}` },
+    });
 
     // Download book content
     const dlRes = await fetch(`${BASE_URL}/api/books/${book.id}/download`);
