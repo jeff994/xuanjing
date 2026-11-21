@@ -1,4 +1,4 @@
-import { ArrowLeft, BookText, Calendar, Download, MessageSquare, Send, Trash2, User } from 'lucide-react';
+import { ArrowLeft, BookOpen, BookText, Calendar, Download, MessageSquare, Send, Trash2, User } from 'lucide-react';
 import { FormEvent, useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { api } from '../api/client';
@@ -126,16 +126,16 @@ export function BookDetailPage() {
       {/* Book Info Card */}
       <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
         <div className="grid grid-cols-1 md:grid-cols-3">
-          <div className="flex items-center justify-center bg-slate-100 md:col-span-1">
+          <Link to={`/books/${book.id}/read`} className="flex items-center justify-center bg-slate-100 md:col-span-1">
             {book.coverUrl ? (
-              <img src={book.coverUrl} alt={book.title} className="h-full max-h-80 w-full object-cover" />
+              <img src={book.coverUrl} alt={book.title} className="h-full max-h-80 w-full object-cover transition hover:opacity-95" />
             ) : (
               <div className="flex h-64 w-full flex-col items-center justify-center bg-gradient-to-br from-indigo-500 to-purple-600 p-6 text-white md:h-full">
-                <BookText className="mb-3 h-12 w-12 opacity-90" />
+                <BookText className="mb-3 h-12 w-12 opacity-90" aria-hidden="true" />
                 <span className="text-center text-sm font-semibold">{book.fileName}</span>
               </div>
             )}
-          </div>
+          </Link>
 
           <div className="flex flex-col p-6 md:col-span-2">
             <div className="flex items-start justify-between gap-4">
@@ -172,12 +172,19 @@ export function BookDetailPage() {
               {book.description || t('book.noDescription')}
             </p>
 
-            <div className="mt-6 flex items-center gap-3 pt-4">
-              <a
-                href={book.downloadUrl}
+            <div className="mt-6 flex flex-wrap items-center gap-3 pt-4">
+              <Link
+                to={`/books/${book.id}/read`}
                 className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-indigo-700"
               >
-                <Download className="h-4 w-4" />
+                <BookOpen className="h-4 w-4" aria-hidden="true" />
+                {t('book.read')}
+              </Link>
+              <a
+                href={book.downloadUrl}
+                className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-5 py-2.5 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50"
+              >
+                <Download className="h-4 w-4" aria-hidden="true" />
                 {t('book.download')}
               </a>
             </div>

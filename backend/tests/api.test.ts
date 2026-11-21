@@ -22,7 +22,7 @@ function signTestJwt(payload: Record<string, unknown>): string {
   return `${head}.${body}.${sig}`;
 }
 
-async function waitForHealth(url: string, retries = 30): Promise<void> {
+async function waitForHealth(url: string, retries = 50): Promise<void> {
   for (let i = 0; i < retries; i++) {
     try {
       const res = await fetch(url);
@@ -150,6 +150,36 @@ describe('Book Portal REST API', () => {
     const listData = (await listRes.json()) as { books: Array<{ id: number; commentCount: number }> };
     assert.equal(listData.books.length, 1);
     assert.equal(listData.books[0].commentCount, 1);
+
+    // Stream book content inline for the page-by-page reader
+    const contentRes = await fetch(`${BASE_URL}/api/books/${book.id}/content`);
+    assert.equal(contentRes.status, 200);
+    assert.match(contentRes.headers.get('content-disposition') ?? '', /^inline;/);
+    assert.match(contentRes.headers.get('content-type') ?? '', /^text\/plain/);
+    assert.equal(contentRes.headers.get('x-content-type-options'), 'nosniff');
+    assert.equal(await contentRes.text(), 'Chapter 1: Reliable Systems');
+
+    // Spoofed text/html MIME on .mobi must NEVER be served inline as text/html
+    const spoofForm = new FormData();
+    spoofForm.append('title', 'Spoofed Mobi');
+    spoofForm.append('author', 'Tester');
+    spoofForm.append('bookFile', new Blob(['<script>alert(1)</script>'], { type: 'text/html' }), 'evil.mobi');
+    const spoofUpload = await fetch(`${BASE_URL}/api/books`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${alice.token}` },
+      body: spoofForm,
+    });
+    assert.equal(spoofUpload.status, 201);
+    const { book: spoofBook } = (await spoofUpload.json()) as { book: { id: number } };
+    const spoofContent = await fetch(`${BASE_URL}/api/books/${spoofBook.id}/content`);
+    assert.equal(spoofContent.status, 200);
+    assert.equal(spoofContent.headers.get('content-type'), 'application/x-mobipocket-ebook');
+    assert.equal(spoofContent.headers.get('x-content-type-options'), 'nosniff');
+    assert.match(spoofContent.headers.get('content-disposition') ?? '', /^attachment;/);
+    await fetch(`${BASE_URL}/api/books/${spoofBook.id}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${alice.token}` },
+    });
 
     // Download book content
     const dlRes = await fetch(`${BASE_URL}/api/books/${book.id}/download`);
