@@ -30,6 +30,13 @@ npm run dev
 - Frontend: http://localhost:5173
 - Backend API: http://localhost:4000 (health check: http://localhost:4000/api/health)
 
+## Running Tests
+```bash
+npm test                # Run both backend and frontend test suites
+npm run test:backend    # Fastify REST API + OAuth security tests (node:test)
+npm run test:frontend   # React i18n, Navbar, and OAuth callback tests (Vitest)
+```
+
 ## Load-Balanced Production Stack (Docker Compose)
 Runs **Nginx** (`least_conn` load balancer) → **2× Fastify API replicas (`api-1`, `api-2`)** + **React SPA** + **PostgreSQL** + **MinIO (S3)**:
 ```bash
