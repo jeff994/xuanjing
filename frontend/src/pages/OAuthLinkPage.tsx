@@ -1,7 +1,8 @@
 import { ShieldAlert } from 'lucide-react';
-import { FormEvent, useEffect, useState } from 'react';
+import { FormEvent, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../api/client';
+import { OAUTH_TX_STORAGE_KEY } from '../components/SocialLoginButtons';
 import { useAuth } from '../context/AuthContext';
 
 const PROVIDER_LABELS: Record<string, string> = {
@@ -13,8 +14,10 @@ const PROVIDER_LABELS: Record<string, string> = {
 export function OAuthLinkPage() {
   const { user, loginWithToken } = useAuth();
   const navigate = useNavigate();
+  const initializedRef = useRef(false);
 
   const [linkToken, setLinkToken] = useState('');
+  const [tx, setTx] = useState('');
   const [provider, setProvider] = useState('');
   const [email, setEmail] = useState('');
   const [hasPassword, setHasPassword] = useState(true);
@@ -23,6 +26,9 @@ export function OAuthLinkPage() {
   const [error, setError] = useState('');
 
   useEffect(() => {
+    if (initializedRef.current) return;
+    initializedRef.current = true;
+
     const hash = window.location.hash.startsWith('#') ? window.location.hash.slice(1) : '';
     const params = new URLSearchParams(hash);
     const token = params.get('linkToken') ?? '';
@@ -34,12 +40,16 @@ export function OAuthLinkPage() {
       window.history.replaceState(null, '', window.location.pathname);
     }
 
-    if (!token) {
-      setError('Missing or expired account linking session. Please sign in again.');
+    const storedTx = sessionStorage.getItem(OAUTH_TX_STORAGE_KEY) ?? '';
+    sessionStorage.removeItem(OAUTH_TX_STORAGE_KEY);
+
+    if (!token || !storedTx) {
+      setError('This linking session did not originate from this browser tab. Please sign in again.');
       return;
     }
 
     setLinkToken(token);
+    setTx(storedTx);
     setProvider(prov);
     setEmail(mail);
     setHasPassword(hasPwd);
@@ -50,13 +60,13 @@ export function OAuthLinkPage() {
 
   const handleConfirmLink = async (e: FormEvent) => {
     e.preventDefault();
-    if (!linkToken) return;
+    if (!linkToken || !tx) return;
 
     setSubmitting(true);
     setError('');
     try {
       const res = await api.linkOAuthAccount(
-        isSignedInAsSameEmail ? { linkToken } : { linkToken, password }
+        isSignedInAsSameEmail ? { linkToken, tx } : { linkToken, tx, password }
       );
       await loginWithToken(res.token);
       navigate(res.next.startsWith('/') ? res.next : '/', { replace: true });
@@ -92,7 +102,7 @@ export function OAuthLinkPage() {
           </div>
         )}
 
-        {linkToken && isSignedInAsSameEmail ? (
+        {linkToken && tx && isSignedInAsSameEmail ? (
           <form onSubmit={handleConfirmLink} className="mt-6 space-y-4">
             <p className="rounded-xl bg-slate-50 p-3 text-sm text-slate-700">
               You are currently signed in as <strong>{user?.email}</strong>. Click below to link{' '}
@@ -106,7 +116,7 @@ export function OAuthLinkPage() {
               {submitting ? 'Linking...' : `Link ${providerLabel} Account`}
             </button>
           </form>
-        ) : linkToken && hasPassword ? (
+        ) : linkToken && tx && hasPassword ? (
           <form onSubmit={handleConfirmLink} className="mt-6 space-y-4">
             <div>
               <label className="block text-sm font-medium text-slate-700">Existing Account Password</label>
@@ -130,8 +140,7 @@ export function OAuthLinkPage() {
           </form>
         ) : (
           <div className="mt-6 rounded-xl bg-slate-50 p-4 text-sm text-slate-600">
-            This email is already registered via another sign-in provider without a password. Please sign in with your
-            original provider first to confirm ownership.
+            Please return to the Sign in page and start signing in again from this browser.
           </div>
         )}
 

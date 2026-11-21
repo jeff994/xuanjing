@@ -18,25 +18,51 @@ interface OAuthProfile {
 interface OAuthStatePayload {
   purpose: 'oauth_state';
   oauthProvider: OAuthProvider;
+  tx: string;
   nonce: string;
+  next: string;
+}
+
+interface OAuthExchangePayload {
+  purpose: 'oauth_exchange';
+  userId: number;
+  tx: string;
   next: string;
 }
 
 interface OAuthLinkTokenPayload {
   purpose: 'oauth_link';
   profile: OAuthProfile;
+  tx: string;
   next: string;
 }
 
 const VALID_PROVIDERS = new Set<OAuthProvider>(['google', 'wechat', 'facebook']);
 
+const exchangeSchema = z.object({
+  exchangeToken: z.string().min(1, 'Missing exchange token'),
+  tx: z.string().min(16, 'Missing browser transaction token').max(128),
+});
+
 const linkAccountSchema = z.object({
   linkToken: z.string().min(1, 'Missing link token'),
+  tx: z.string().min(16, 'Missing browser transaction token').max(128),
   password: z.string().min(1).optional(),
 });
 
 function isValidProvider(value: string): value is OAuthProvider {
   return VALID_PROVIDERS.has(value as OAuthProvider);
+}
+
+function isValidTx(value?: string): value is string {
+  return typeof value === 'string' && value.length >= 16 && value.length <= 128 && /^[a-zA-Z0-9_-]+$/.test(value);
+}
+
+function timingSafeMatch(a: string, b: string): boolean {
+  const bufA = Buffer.from(a);
+  const bufB = Buffer.from(b);
+  if (bufA.length !== bufB.length) return false;
+  return crypto.timingSafeEqual(bufA, bufB);
 }
 
 function isProviderConfigured(provider: OAuthProvider): boolean {
@@ -267,7 +293,6 @@ type OAuthResolveResult =
   | { status: 'link_required'; hasPassword: boolean };
 
 async function resolveOAuthUser(profile: OAuthProfile): Promise<OAuthResolveResult> {
-  // 1. Existing linked OAuth account (already explicitly associated with this provider identity)
   const existingLink = await db('oauth_accounts')
     .where({ provider: profile.provider, provider_user_id: profile.providerUserId })
     .first();
@@ -293,8 +318,7 @@ async function resolveOAuthUser(profile: OAuthProfile): Promise<OAuthResolveResu
     }
   }
 
-  // 2. If an account with this email already exists, NEVER auto-link without proving ownership.
-  //    Prevents pre-account takeover where an attacker registers a victim's email before the victim uses OAuth.
+  // Never auto-link to an existing email account without explicit ownership proof
   if (profile.email) {
     const existingEmailUser = await db('users').where({ email: profile.email }).first();
     if (existingEmailUser) {
@@ -304,7 +328,6 @@ async function resolveOAuthUser(profile: OAuthProfile): Promise<OAuthResolveResu
     }
   }
 
-  // 3. No conflicting account exists — create a new OAuth user account
   const username = await generateUniqueUsername(profile.displayName || profile.email?.split('@')[0] || profile.provider);
   const email =
     profile.email ||
@@ -336,7 +359,6 @@ async function resolveOAuthUser(profile: OAuthProfile): Promise<OAuthResolveResu
 }
 
 export async function oauthRoutes(app: FastifyInstance): Promise<void> {
-  // Report which OAuth providers are configured on the backend
   app.get('/api/auth/providers', async () => {
     return {
       providers: [
@@ -347,13 +369,18 @@ export async function oauthRoutes(app: FastifyInstance): Promise<void> {
     };
   });
 
-  // Start stateless OAuth 2.0 redirect
+  // Start browser-bound, stateless OAuth 2.0 redirect
   app.get('/api/auth/oauth/:provider', async (request, reply) => {
     const { provider } = request.params as { provider: string };
-    const { next } = request.query as { next?: string };
+    const { next, tx } = request.query as { next?: string; tx?: string };
 
     if (!isValidProvider(provider)) {
       return reply.code(400).send({ error: `Unsupported OAuth provider: ${provider}` });
+    }
+
+    if (!isValidTx(tx)) {
+      const msg = encodeURIComponent('Invalid login transaction. Please start sign-in from the login page.');
+      return reply.redirect(`${config.frontendUrl}/login?error=${msg}`);
     }
 
     if (!isProviderConfigured(provider)) {
@@ -361,11 +388,11 @@ export async function oauthRoutes(app: FastifyInstance): Promise<void> {
       return reply.redirect(`${config.frontendUrl}/login?error=${msg}`);
     }
 
-    // Stateless signed JWT state token — safe across multiple load-balanced API replicas
     const state = app.jwt.sign(
       {
         purpose: 'oauth_state',
         oauthProvider: provider,
+        tx,
         nonce: crypto.randomUUID(),
         next: sanitizeNextPath(next),
       } as unknown as Parameters<typeof app.jwt.sign>[0],
@@ -376,7 +403,7 @@ export async function oauthRoutes(app: FastifyInstance): Promise<void> {
     return reply.redirect(authorizeUrl);
   });
 
-  // OAuth 2.0 callback handler
+  // OAuth 2.0 callback handler — binds result to the initiating browser's `tx` nonce
   app.get('/api/auth/oauth/:provider/callback', async (request, reply) => {
     const { provider } = request.params as { provider: string };
     const { code, state, error, error_description } = request.query as {
@@ -408,8 +435,8 @@ export async function oauthRoutes(app: FastifyInstance): Promise<void> {
       return redirectWithError('OAuth session expired or invalid state. Please try signing in again.');
     }
 
-    if (statePayload.purpose !== 'oauth_state' || statePayload.oauthProvider !== provider) {
-      return redirectWithError('OAuth provider mismatch');
+    if (statePayload.purpose !== 'oauth_state' || statePayload.oauthProvider !== provider || !isValidTx(statePayload.tx)) {
+      return redirectWithError('OAuth provider or transaction mismatch');
     }
 
     try {
@@ -428,6 +455,7 @@ export async function oauthRoutes(app: FastifyInstance): Promise<void> {
           {
             purpose: 'oauth_link',
             profile,
+            tx: statePayload.tx,
             next,
           } as unknown as Parameters<typeof app.jwt.sign>[0],
           { expiresIn: '10m' }
@@ -443,8 +471,18 @@ export async function oauthRoutes(app: FastifyInstance): Promise<void> {
         return reply.redirect(`${config.frontendUrl}/oauth/link#${fragment}`);
       }
 
-      const token = app.jwt.sign(resolved.user);
-      const fragment = new URLSearchParams({ token, next }).toString();
+      // Issue a short-lived, browser-bound exchange token (never a raw session JWT in the URL)
+      const exchangeToken = app.jwt.sign(
+        {
+          purpose: 'oauth_exchange',
+          userId: resolved.user.id,
+          tx: statePayload.tx,
+          next,
+        } as unknown as Parameters<typeof app.jwt.sign>[0],
+        { expiresIn: '2m' }
+      );
+
+      const fragment = new URLSearchParams({ exchange: exchangeToken }).toString();
       return reply.redirect(`${config.frontendUrl}/oauth/callback#${fragment}`);
     } catch (err) {
       app.log.error(err, `OAuth callback failed for ${provider}`);
@@ -453,9 +491,47 @@ export async function oauthRoutes(app: FastifyInstance): Promise<void> {
     }
   });
 
-  // Explicit ownership-verified linking endpoint:
-  // Links a pending OAuth identity to an existing account ONLY after proving ownership via
-  // either (a) the existing account's password, or (b) an active Bearer JWT for that same user.
+  // Exchange a browser-bound `oauth_exchange` token + matching `tx` nonce for a real session JWT
+  app.post('/api/auth/oauth/exchange', async (request, reply) => {
+    const parsed = exchangeSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ error: parsed.error.issues[0]?.message ?? 'Invalid exchange request' });
+    }
+
+    let payload: OAuthExchangePayload;
+    try {
+      payload = app.jwt.verify<OAuthExchangePayload>(parsed.data.exchangeToken);
+    } catch {
+      return reply.code(401).send({ error: 'OAuth sign-in token expired or invalid. Please sign in again.' });
+    }
+
+    if (
+      payload.purpose !== 'oauth_exchange' ||
+      typeof payload.userId !== 'number' ||
+      !isValidTx(payload.tx) ||
+      !timingSafeMatch(payload.tx, parsed.data.tx)
+    ) {
+      return reply.code(401).send({
+        error: 'This sign-in link does not match your browser session. Please initiate sign-in from this browser.',
+      });
+    }
+
+    const userRow = await db('users').where({ id: payload.userId }).first();
+    if (!userRow) {
+      return reply.code(404).send({ error: 'User account not found' });
+    }
+
+    const user = {
+      id: Number(userRow.id),
+      username: userRow.username as string,
+      email: userRow.email as string,
+    };
+    const token = app.jwt.sign(user);
+
+    return reply.send({ user, token, next: sanitizeNextPath(payload.next) });
+  });
+
+  // Explicit ownership-verified + browser-bound linking endpoint
   app.post('/api/auth/oauth/link', async (request, reply) => {
     const parsed = linkAccountSchema.safeParse(request.body);
     if (!parsed.success) {
@@ -469,8 +545,16 @@ export async function oauthRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(400).send({ error: 'Link session expired or invalid. Please sign in with your provider again.' });
     }
 
-    if (payload.purpose !== 'oauth_link' || !payload.profile?.email || !isValidProvider(payload.profile.provider)) {
-      return reply.code(400).send({ error: 'Invalid link token' });
+    if (
+      payload.purpose !== 'oauth_link' ||
+      !payload.profile?.email ||
+      !isValidProvider(payload.profile.provider) ||
+      !isValidTx(payload.tx) ||
+      !timingSafeMatch(payload.tx, parsed.data.tx)
+    ) {
+      return reply.code(401).send({
+        error: 'This linking request does not match your browser session. Please sign in again.',
+      });
     }
 
     const existingUser = await db('users').where({ email: payload.profile.email }).first();
@@ -478,13 +562,13 @@ export async function oauthRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(404).send({ error: 'Account no longer exists. Please try signing in again.' });
     }
 
-    // Proof of ownership check: either matching authenticated JWT OR valid password for existingUser
     let ownershipVerified = false;
 
     if (request.headers.authorization?.startsWith('Bearer ')) {
       try {
         await request.jwtVerify();
-        if (request.user && request.user.id === Number(existingUser.id)) {
+        const jwtUser = request.user as { id?: number; purpose?: string };
+        if (!jwtUser.purpose && jwtUser.id === Number(existingUser.id)) {
           ownershipVerified = true;
         }
       } catch {
@@ -506,7 +590,6 @@ export async function oauthRoutes(app: FastifyInstance): Promise<void> {
       });
     }
 
-    // Ensure this provider identity isn't already linked to a different user
     const existingLink = await db('oauth_accounts')
       .where({
         provider: payload.profile.provider,

@@ -1,30 +1,45 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { api } from '../api/client';
+import { OAUTH_TX_STORAGE_KEY } from '../components/SocialLoginButtons';
 import { useAuth } from '../context/AuthContext';
 
 export function OAuthCallbackPage() {
   const { loginWithToken } = useAuth();
   const navigate = useNavigate();
   const [error, setError] = useState('');
+  const startedRef = useRef(false);
 
   useEffect(() => {
+    // Guard against React StrictMode double-invoking the effect after consuming sessionStorage
+    if (startedRef.current) return;
+    startedRef.current = true;
+
     const hash = window.location.hash.startsWith('#') ? window.location.hash.slice(1) : '';
     const params = new URLSearchParams(hash);
-    const token = params.get('token');
-    const next = params.get('next') || '/';
+    const exchangeToken = params.get('exchange');
 
     // Clear token from the browser URL bar immediately
     if (window.location.hash) {
       window.history.replaceState(null, '', window.location.pathname);
     }
 
-    if (!token) {
-      setError('Missing authentication token from OAuth callback.');
+    const tx = sessionStorage.getItem(OAUTH_TX_STORAGE_KEY);
+    sessionStorage.removeItem(OAUTH_TX_STORAGE_KEY);
+
+    if (!exchangeToken || !tx) {
+      setError(
+        'This sign-in callback did not match a login started in this browser tab. Please initiate sign-in from the Sign in page.'
+      );
       return;
     }
 
-    loginWithToken(token)
-      .then(() => navigate(next.startsWith('/') ? next : '/', { replace: true }))
+    api
+      .exchangeOAuthToken({ exchangeToken, tx })
+      .then(async (res) => {
+        await loginWithToken(res.token);
+        navigate(res.next.startsWith('/') ? res.next : '/', { replace: true });
+      })
       .catch((err) => {
         setError(err instanceof Error ? err.message : 'Failed to complete sign-in.');
       });

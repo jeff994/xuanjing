@@ -68,7 +68,14 @@ export const api = {
     return request<{ providers: OAuthProviderInfo[] }>('/api/auth/providers');
   },
 
-  linkOAuthAccount(payload: { linkToken: string; password?: string }) {
+  exchangeOAuthToken(payload: { exchangeToken: string; tx: string }) {
+    return request<{ user: User; token: string; next: string }>('/api/auth/oauth/exchange', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  linkOAuthAccount(payload: { linkToken: string; tx: string; password?: string }) {
     return request<{ user: User; token: string; next: string }>('/api/auth/oauth/link', {
       method: 'POST',
       body: JSON.stringify(payload),

@@ -52,6 +52,14 @@ function FacebookIcon() {
   );
 }
 
+export const OAUTH_TX_STORAGE_KEY = 'book_portal_oauth_tx';
+
+function createOAuthTransactionId(): string {
+  const bytes = new Uint8Array(24);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+}
+
 export function SocialLoginButtons({ next = '/' }: SocialLoginButtonsProps) {
   const [providers, setProviders] = useState<OAuthProviderInfo[]>(DEFAULT_PROVIDERS);
   const [notice, setNotice] = useState('');
@@ -76,7 +84,10 @@ export function SocialLoginButtons({ next = '/' }: SocialLoginButtonsProps) {
       return;
     }
 
-    const query = new URLSearchParams({ next }).toString();
+    const tx = createOAuthTransactionId();
+    sessionStorage.setItem(OAUTH_TX_STORAGE_KEY, tx);
+
+    const query = new URLSearchParams({ next, tx }).toString();
     window.location.href = `/api/auth/oauth/${provider.id}?${query}`;
   };
 
