@@ -14,6 +14,7 @@ export interface Book {
   fileSize: number;
   coverUrl: string | null;
   downloadUrl: string;
+  contentUrl?: string;
   uploadedBy: number;
   uploaderUsername: string;
   commentCount: number;

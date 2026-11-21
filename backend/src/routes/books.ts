@@ -19,6 +19,15 @@ function sanitizeFilename(name: string): string {
   return path.basename(name).replace(/[^a-zA-Z0-9._-]/g, '_');
 }
 
+function resolveInlineContentType(fileName: string, fallbackMime?: string): string {
+  const ext = path.extname(fileName).toLowerCase();
+  if (ext === '.pdf') return 'application/pdf';
+  if (ext === '.epub') return 'application/epub+zip';
+  if (ext === '.txt') return 'text/plain; charset=utf-8';
+  if (ext === '.md') return 'text/markdown; charset=utf-8';
+  return fallbackMime || 'application/octet-stream';
+}
+
 export async function bookRoutes(app: FastifyInstance): Promise<void> {
   // List & search books
   app.get('/api/books', async (request) => {
@@ -66,6 +75,7 @@ export async function bookRoutes(app: FastifyInstance): Promise<void> {
         fileSize: Number(row.file_size),
         coverUrl: row.cover_key ? `/api/books/${row.id}/cover` : null,
         downloadUrl: `/api/books/${row.id}/download`,
+        contentUrl: `/api/books/${row.id}/content`,
         uploadedBy: Number(row.uploaded_by),
         uploaderUsername: row.uploader_username ?? 'Unknown',
         commentCount: Number(row.comment_count ?? 0),
@@ -108,6 +118,7 @@ export async function bookRoutes(app: FastifyInstance): Promise<void> {
         fileSize: Number(row.file_size),
         coverUrl: row.cover_key ? `/api/books/${row.id}/cover` : null,
         downloadUrl: `/api/books/${row.id}/download`,
+        contentUrl: `/api/books/${row.id}/content`,
         uploadedBy: Number(row.uploaded_by),
         uploaderUsername: row.uploader_username ?? 'Unknown',
         commentCount: Number(countRow?.count ?? 0),
@@ -205,12 +216,37 @@ export async function bookRoutes(app: FastifyInstance): Promise<void> {
         fileSize: bookFile.buffer.length,
         coverUrl: coverKey ? `/api/books/${bookId}/cover` : null,
         downloadUrl: `/api/books/${bookId}/download`,
+        contentUrl: `/api/books/${bookId}/content`,
         uploadedBy: request.user.id,
         uploaderUsername: request.user.username,
         commentCount: 0,
         createdAt: new Date().toISOString(),
       },
     });
+  });
+
+  // Stream book file inline for the in-browser page-by-page reader
+  app.get('/api/books/:id/content', async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const bookId = Number(id);
+    if (!Number.isInteger(bookId) || bookId <= 0) {
+      return reply.code(400).send({ error: 'Invalid book ID' });
+    }
+
+    const book = await db('books').where({ id: bookId }).first();
+    if (!book) {
+      return reply.code(404).send({ error: 'Book not found' });
+    }
+
+    try {
+      const stream = await storage.getStream(book.file_key);
+      reply.header('Content-Type', resolveInlineContentType(book.file_name, book.file_mime));
+      reply.header('Content-Disposition', `inline; filename="${book.file_name}"`);
+      reply.header('Cache-Control', 'private, max-age=3600');
+      return reply.send(stream);
+    } catch {
+      return reply.code(404).send({ error: 'Book file missing from storage' });
+    }
   });
 
   // Download book file

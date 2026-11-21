@@ -22,7 +22,7 @@ function signTestJwt(payload: Record<string, unknown>): string {
   return `${head}.${body}.${sig}`;
 }
 
-async function waitForHealth(url: string, retries = 30): Promise<void> {
+async function waitForHealth(url: string, retries = 50): Promise<void> {
   for (let i = 0; i < retries; i++) {
     try {
       const res = await fetch(url);
@@ -150,6 +150,13 @@ describe('Book Portal REST API', () => {
     const listData = (await listRes.json()) as { books: Array<{ id: number; commentCount: number }> };
     assert.equal(listData.books.length, 1);
     assert.equal(listData.books[0].commentCount, 1);
+
+    // Stream book content inline for the page-by-page reader
+    const contentRes = await fetch(`${BASE_URL}/api/books/${book.id}/content`);
+    assert.equal(contentRes.status, 200);
+    assert.match(contentRes.headers.get('content-disposition') ?? '', /^inline;/);
+    assert.match(contentRes.headers.get('content-type') ?? '', /^text\/plain/);
+    assert.equal(await contentRes.text(), 'Chapter 1: Reliable Systems');
 
     // Download book content
     const dlRes = await fetch(`${BASE_URL}/api/books/${book.id}/download`);

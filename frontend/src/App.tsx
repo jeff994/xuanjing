@@ -4,6 +4,7 @@ import { ProtectedRoute } from './components/ProtectedRoute';
 import { AuthProvider } from './context/AuthContext';
 import { LanguageProvider } from './context/LanguageContext';
 import { BookDetailPage } from './pages/BookDetailPage';
+import { BookReaderPage } from './pages/BookReaderPage';
 import { HomePage } from './pages/HomePage';
 import { LoginPage } from './pages/LoginPage';
 import { OAuthCallbackPage } from './pages/OAuthCallbackPage';
@@ -22,6 +23,7 @@ export function App() {
               <Routes>
                 <Route path="/" element={<HomePage />} />
                 <Route path="/books/:id" element={<BookDetailPage />} />
+                <Route path="/books/:id/read" element={<BookReaderPage />} />
                 <Route
                   path="/upload"
                   element={
