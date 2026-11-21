@@ -24,6 +24,14 @@ services:
       PORT: 4000
       INSTANCE_ID: api-1
       JWT_SECRET: ${JWT_SECRET:-replace-with-strong-production-secret}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:8080}
+      API_PUBLIC_URL: ${API_PUBLIC_URL:-http://localhost:8080}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      WECHAT_APP_ID: ${WECHAT_APP_ID:-}
+      WECHAT_APP_SECRET: ${WECHAT_APP_SECRET:-}
+      FACEBOOK_APP_ID: ${FACEBOOK_APP_ID:-}
+      FACEBOOK_APP_SECRET: ${FACEBOOK_APP_SECRET:-}
       DATABASE_URL: postgres://books:books_pass@postgres:5432/bookportal
       STORAGE_DRIVER: s3
       S3_ENDPOINT: http://minio:9000
@@ -46,6 +54,14 @@ services:
       PORT: 4000
       INSTANCE_ID: api-2
       JWT_SECRET: ${JWT_SECRET:-replace-with-strong-production-secret}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:8080}
+      API_PUBLIC_URL: ${API_PUBLIC_URL:-http://localhost:8080}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      WECHAT_APP_ID: ${WECHAT_APP_ID:-}
+      WECHAT_APP_SECRET: ${WECHAT_APP_SECRET:-}
+      FACEBOOK_APP_ID: ${FACEBOOK_APP_ID:-}
+      FACEBOOK_APP_SECRET: ${FACEBOOK_APP_SECRET:-}
       DATABASE_URL: postgres://books:books_pass@postgres:5432/bookportal
       STORAGE_DRIVER: s3
       S3_ENDPOINT: http://minio:9000

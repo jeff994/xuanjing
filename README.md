@@ -3,15 +3,23 @@
 A stateless, horizontally scalable book portal built with **React + Vite + TypeScript + Tailwind CSS** on the frontend and **Fastify + TypeScript** on the backend.
 
 ## Features
-- **User Authentication:** Register, sign in, and stateless JWT authentication (`POST /api/auth/register`, `POST /api/auth/login`, `GET /api/auth/me`)
+- **User Authentication:** Register, sign in, stateless JWT authentication (`POST /api/auth/register`, `POST /api/auth/login`, `GET /api/auth/me`), and stateless OAuth 2.0 social login (**Google/Gmail**, **WeChat**, **Facebook**)
 - **Book Uploads & Downloads:** Upload books (`.pdf`, `.epub`, `.txt`, `.md`, `.mobi`) with optional cover images, search/browse catalog, download files, and delete own uploads
 - **Comments:** View, post, and delete comments on any book
 - **Load-Balancer Ready:**
-  - Stateless JWT auth (no sticky sessions required)
+  - Stateless JWT auth & signed JWT OAuth `state` tokens (no sticky sessions required)
   - Pluggable storage (`local` for single-node dev, `s3` for AWS S3 / Cloudflare R2 / MinIO in multi-replica prod)
   - Dual DB support via Knex (SQLite for zero-config local dev, PostgreSQL for production)
   - Health check endpoint (`GET /api/health`) and `X-API-Instance` response header
   - Graceful `SIGTERM`/`SIGINT` shutdown
+
+## Social Login Setup (Google / WeChat / Facebook)
+Copy `backend/.env.example` to `backend/.env` and fill in the provider credentials you want to enable:
+- **Google (Gmail):** `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` — Callback: `http://localhost:4000/api/auth/oauth/google/callback`
+- **WeChat (Open Platform Web QR):** `WECHAT_APP_ID`, `WECHAT_APP_SECRET` — Callback: `http://localhost:4000/api/auth/oauth/wechat/callback`
+- **Facebook:** `FACEBOOK_APP_ID`, `FACEBOOK_APP_SECRET` — Callback: `http://localhost:4000/api/auth/oauth/facebook/callback`
+
+*(In load-balanced Docker Compose mode, set `API_PUBLIC_URL=http://localhost:8080` and `FRONTEND_URL=http://localhost:8080`.)*
 
 ## Quick Start (Local Development — No Docker Needed)
 ```bash

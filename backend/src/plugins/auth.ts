@@ -32,6 +32,10 @@ export async function registerAuthPlugin(app: FastifyInstance): Promise<void> {
   app.decorate('authenticate', async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       await request.jwtVerify();
+      const payload = request.user as AuthUser & { purpose?: string };
+      if (payload.purpose || typeof payload.id !== 'number') {
+        reply.code(401).send({ error: 'Authentication required' });
+      }
     } catch {
       reply.code(401).send({ error: 'Authentication required' });
     }

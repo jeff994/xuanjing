@@ -1,17 +1,19 @@
 import { FormEvent, useState } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import { SocialLoginButtons } from '../components/SocialLoginButtons';
 import { useAuth } from '../context/AuthContext';
 
 export function LoginPage() {
   const { login } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const [searchParams] = useSearchParams();
   const from = (location.state as { from?: string } | null)?.from ?? '/';
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState('');
+  const [error, setError] = useState(() => searchParams.get('error') ?? '');
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -70,6 +72,8 @@ export function LoginPage() {
             {submitting ? 'Signing in...' : 'Sign in'}
           </button>
         </form>
+
+        <SocialLoginButtons next={from} />
 
         <p className="mt-6 text-center text-sm text-slate-600">
           New here?{' '}

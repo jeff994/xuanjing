@@ -65,7 +65,12 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     const { email, password } = parsed.data;
     const row = await db('users').where({ email }).first();
 
-    if (!row || !(await bcrypt.compare(password, row.password_hash))) {
+    if (
+      !row ||
+      typeof row.password_hash !== 'string' ||
+      row.password_hash.startsWith('oauth:') ||
+      !(await bcrypt.compare(password, row.password_hash))
+    ) {
       return reply.code(401).send({ error: 'Invalid email or password' });
     }
 

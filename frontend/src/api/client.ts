@@ -1,4 +1,4 @@
-import { Book, Comment, User } from '../types';
+import { Book, Comment, OAuthProviderInfo, User } from '../types';
 
 const TOKEN_KEY = 'book_portal_jwt';
 
@@ -62,6 +62,24 @@ export const api = {
 
   me() {
     return request<{ user: User }>('/api/auth/me');
+  },
+
+  listAuthProviders() {
+    return request<{ providers: OAuthProviderInfo[] }>('/api/auth/providers');
+  },
+
+  exchangeOAuthToken(payload: { exchangeToken: string; tx: string }) {
+    return request<{ user: User; token: string; next: string }>('/api/auth/oauth/exchange', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  linkOAuthAccount(payload: { linkToken: string; tx: string; password?: string }) {
+    return request<{ user: User; token: string; next: string }>('/api/auth/oauth/link', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
   },
 
   // Books

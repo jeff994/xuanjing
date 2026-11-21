@@ -68,6 +68,21 @@ export async function initDatabase(): Promise<void> {
       table.timestamp('created_at').defaultTo(db.fn.now());
     });
   }
+
+  const hasOAuthAccounts = await db.schema.hasTable('oauth_accounts');
+  if (!hasOAuthAccounts) {
+    await db.schema.createTable('oauth_accounts', (table) => {
+      table.increments('id').primary();
+      table.integer('user_id').unsigned().notNullable().references('id').inTable('users').onDelete('CASCADE');
+      table.string('provider', 32).notNullable();
+      table.string('provider_user_id', 255).notNullable();
+      table.string('email', 255).nullable();
+      table.string('display_name', 255).nullable();
+      table.string('avatar_url', 1024).nullable();
+      table.timestamp('created_at').defaultTo(db.fn.now());
+      table.unique(['provider', 'provider_user_id']);
+    });
+  }
 }
 
 export async function checkDatabaseHealth(): Promise<boolean> {
