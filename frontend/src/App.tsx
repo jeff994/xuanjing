@@ -2,6 +2,7 @@ import { BrowserRouter, Route, Routes } from 'react-router-dom';
 import { Navbar } from './components/Navbar';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { AuthProvider } from './context/AuthContext';
+import { LanguageProvider } from './context/LanguageContext';
 import { BookDetailPage } from './pages/BookDetailPage';
 import { HomePage } from './pages/HomePage';
 import { LoginPage } from './pages/LoginPage';
@@ -12,30 +13,32 @@ import { UploadBookPage } from './pages/UploadBookPage';
 
 export function App() {
   return (
-    <AuthProvider>
-      <BrowserRouter>
-        <div className="min-h-screen bg-slate-50">
-          <Navbar />
-          <main>
-            <Routes>
-              <Route path="/" element={<HomePage />} />
-              <Route path="/books/:id" element={<BookDetailPage />} />
-              <Route
-                path="/upload"
-                element={
-                  <ProtectedRoute>
-                    <UploadBookPage />
-                  </ProtectedRoute>
-                }
-              />
-              <Route path="/login" element={<LoginPage />} />
-              <Route path="/register" element={<RegisterPage />} />
-              <Route path="/oauth/callback" element={<OAuthCallbackPage />} />
-              <Route path="/oauth/link" element={<OAuthLinkPage />} />
-            </Routes>
-          </main>
-        </div>
-      </BrowserRouter>
-    </AuthProvider>
+    <LanguageProvider>
+      <AuthProvider>
+        <BrowserRouter>
+          <div className="min-h-screen bg-slate-50">
+            <Navbar />
+            <main>
+              <Routes>
+                <Route path="/" element={<HomePage />} />
+                <Route path="/books/:id" element={<BookDetailPage />} />
+                <Route
+                  path="/upload"
+                  element={
+                    <ProtectedRoute>
+                      <UploadBookPage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route path="/login" element={<LoginPage />} />
+                <Route path="/register" element={<RegisterPage />} />
+                <Route path="/oauth/callback" element={<OAuthCallbackPage />} />
+                <Route path="/oauth/link" element={<OAuthLinkPage />} />
+              </Routes>
+            </main>
+          </div>
+        </BrowserRouter>
+      </AuthProvider>
+    </LanguageProvider>
   );
 }

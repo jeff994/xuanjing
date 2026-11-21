@@ -1,5 +1,6 @@
 import { BookText, MessageSquare, User } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { useLanguage } from '../context/LanguageContext';
 import { Book } from '../types';
 
 const COVER_GRADIENTS = [
@@ -17,6 +18,7 @@ function formatSize(bytes: number): string {
 }
 
 export function BookCard({ book }: { book: Book }) {
+  const { t } = useLanguage();
   const gradient = COVER_GRADIENTS[book.id % COVER_GRADIENTS.length];
 
   return (
@@ -46,7 +48,7 @@ export function BookCard({ book }: { book: Book }) {
         <h3 className="line-clamp-1 text-base font-semibold text-slate-900 group-hover:text-indigo-600">
           {book.title}
         </h3>
-        <p className="mt-0.5 text-sm text-slate-600">by {book.author}</p>
+        <p className="mt-0.5 text-sm text-slate-600">{t('common.byAuthor', { author: book.author })}</p>
 
         {book.description && (
           <p className="mt-2 line-clamp-2 text-sm text-slate-500">{book.description}</p>
@@ -59,7 +61,9 @@ export function BookCard({ book }: { book: Book }) {
           </span>
           <span className="inline-flex items-center gap-1 font-medium text-slate-600">
             <MessageSquare className="h-3.5 w-3.5" />
-            {book.commentCount} {book.commentCount === 1 ? 'comment' : 'comments'}
+            {t(book.commentCount === 1 ? 'common.commentSingular' : 'common.commentPlural', {
+              count: book.commentCount,
+            })}
           </span>
         </div>
       </div>

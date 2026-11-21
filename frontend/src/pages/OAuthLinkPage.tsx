@@ -4,15 +4,18 @@ import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../api/client';
 import { OAUTH_TX_STORAGE_KEY } from '../components/SocialLoginButtons';
 import { useAuth } from '../context/AuthContext';
+import { useLanguage } from '../context/LanguageContext';
+import { TranslationKey } from '../i18n/translations';
 
-const PROVIDER_LABELS: Record<string, string> = {
-  google: 'Google (Gmail)',
-  wechat: 'WeChat',
-  facebook: 'Facebook',
+const PROVIDER_KEYS: Record<string, TranslationKey> = {
+  google: 'provider.google',
+  wechat: 'provider.wechat',
+  facebook: 'provider.facebook',
 };
 
 export function OAuthLinkPage() {
   const { user, loginWithToken } = useAuth();
+  const { t } = useLanguage();
   const navigate = useNavigate();
   const initializedRef = useRef(false);
 
@@ -44,7 +47,7 @@ export function OAuthLinkPage() {
     sessionStorage.removeItem(OAUTH_TX_STORAGE_KEY);
 
     if (!token || !storedTx) {
-      setError('This linking session did not originate from this browser tab. Please sign in again.');
+      setError(t('oauthLink.txMismatch'));
       return;
     }
 
@@ -53,9 +56,9 @@ export function OAuthLinkPage() {
     setProvider(prov);
     setEmail(mail);
     setHasPassword(hasPwd);
-  }, []);
+  }, [t]);
 
-  const providerLabel = PROVIDER_LABELS[provider] ?? provider;
+  const providerLabel = provider in PROVIDER_KEYS ? t(PROVIDER_KEYS[provider]) : provider;
   const isSignedInAsSameEmail = Boolean(user && email && user.email.toLowerCase() === email.toLowerCase());
 
   const handleConfirmLink = async (e: FormEvent) => {
@@ -71,7 +74,7 @@ export function OAuthLinkPage() {
       await loginWithToken(res.token);
       navigate(res.next.startsWith('/') ? res.next : '/', { replace: true });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to verify ownership and link account');
+      setError(err instanceof Error ? err.message : t('oauthLink.failed'));
     } finally {
       setSubmitting(false);
     }
@@ -85,15 +88,16 @@ export function OAuthLinkPage() {
             <ShieldAlert className="h-5 w-5" />
           </span>
           <div>
-            <h1 className="text-xl font-bold text-slate-900">Verify Account Ownership</h1>
-            <p className="text-xs text-slate-500">Additional verification required before linking</p>
+            <h1 className="text-xl font-bold text-slate-900">{t('oauthLink.title')}</h1>
+            <p className="text-xs text-slate-500">{t('oauthLink.subtitle')}</p>
           </div>
         </div>
 
         <p className="mt-4 text-sm text-slate-600">
-          An account with <strong className="text-slate-900">{email || 'this email'}</strong> already exists. To
-          protect your account, please verify ownership before linking your{' '}
-          <strong className="text-slate-900">{providerLabel || 'social'}</strong> login.
+          {t('oauthLink.description', {
+            email: email || '-',
+            provider: providerLabel || 'OAuth',
+          })}
         </p>
 
         {error && (
@@ -105,27 +109,26 @@ export function OAuthLinkPage() {
         {linkToken && tx && isSignedInAsSameEmail ? (
           <form onSubmit={handleConfirmLink} className="mt-6 space-y-4">
             <p className="rounded-xl bg-slate-50 p-3 text-sm text-slate-700">
-              You are currently signed in as <strong>{user?.email}</strong>. Click below to link{' '}
-              <strong>{providerLabel}</strong> to this account.
+              {t('oauthLink.signedInAs', { email: user?.email ?? '', provider: providerLabel })}
             </p>
             <button
               type="submit"
               disabled={submitting}
               className="w-full rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-indigo-700 disabled:opacity-50"
             >
-              {submitting ? 'Linking...' : `Link ${providerLabel} Account`}
+              {submitting ? t('oauthLink.linking') : t('oauthLink.linkButton', { provider: providerLabel })}
             </button>
           </form>
         ) : linkToken && tx && hasPassword ? (
           <form onSubmit={handleConfirmLink} className="mt-6 space-y-4">
             <div>
-              <label className="block text-sm font-medium text-slate-700">Existing Account Password</label>
+              <label className="block text-sm font-medium text-slate-700">{t('oauthLink.existingPassword')}</label>
               <input
                 type="password"
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="Enter your BookShelf password"
+                placeholder={t('oauthLink.passwordPlaceholder')}
                 className="mt-1.5 w-full rounded-xl border border-slate-300 px-3.5 py-2.5 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
               />
             </div>
@@ -135,18 +138,18 @@ export function OAuthLinkPage() {
               disabled={submitting}
               className="w-full rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-indigo-700 disabled:opacity-50"
             >
-              {submitting ? 'Verifying...' : `Verify & Link ${providerLabel}`}
+              {submitting ? t('oauthLink.verifying') : t('oauthLink.verifyAndLink', { provider: providerLabel })}
             </button>
           </form>
         ) : (
           <div className="mt-6 rounded-xl bg-slate-50 p-4 text-sm text-slate-600">
-            Please return to the Sign in page and start signing in again from this browser.
+            {t('oauthLink.restartHint')}
           </div>
         )}
 
         <p className="mt-6 text-center text-sm text-slate-600">
           <Link to="/login" className="font-medium text-indigo-600 hover:underline">
-            Back to Sign in
+            {t('oauth.backToSignIn')}
           </Link>
         </p>
       </div>

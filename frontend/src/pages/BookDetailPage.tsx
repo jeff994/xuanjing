@@ -3,6 +3,7 @@ import { FormEvent, useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { api } from '../api/client';
 import { useAuth } from '../context/AuthContext';
+import { useLanguage } from '../context/LanguageContext';
 import { Book, Comment } from '../types';
 
 function formatSize(bytes: number): string {
@@ -11,15 +12,11 @@ function formatSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function formatDate(iso: string): string {
-  const date = new Date(iso);
-  return Number.isNaN(date.getTime()) ? iso : date.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
-}
-
 export function BookDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { t, dateLocale } = useLanguage();
 
   const [book, setBook] = useState<Book | null>(null);
   const [comments, setComments] = useState<Comment[]>([]);
@@ -30,9 +27,16 @@ export function BookDetailPage() {
 
   const bookId = Number(id);
 
+  const formatDate = (iso: string): string => {
+    const date = new Date(iso);
+    return Number.isNaN(date.getTime())
+      ? iso
+      : date.toLocaleDateString(dateLocale, { year: 'numeric', month: 'short', day: 'numeric' });
+  };
+
   useEffect(() => {
     if (!Number.isInteger(bookId) || bookId <= 0) {
-      setError('Invalid book ID');
+      setError(t('book.invalidId'));
       setLoading(false);
       return;
     }
@@ -44,7 +48,7 @@ export function BookDetailPage() {
         setComments(commentsRes.comments);
       })
       .catch((err) => {
-        setError(err instanceof Error ? err.message : 'Failed to load book');
+        setError(err instanceof Error ? err.message : t('book.loadError'));
       })
       .finally(() => setLoading(false));
   }, [bookId]);
@@ -60,7 +64,7 @@ export function BookDetailPage() {
       setComments((prev) => [res.comment, ...prev]);
       setNewComment('');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to post comment');
+      setError(err instanceof Error ? err.message : t('book.postCommentError'));
     } finally {
       setSubmitting(false);
     }
@@ -71,24 +75,24 @@ export function BookDetailPage() {
       await api.deleteComment(commentId);
       setComments((prev) => prev.filter((c) => c.id !== commentId));
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete comment');
+      setError(err instanceof Error ? err.message : t('book.deleteCommentError'));
     }
   };
 
   const handleDeleteBook = async () => {
-    if (!book || !window.confirm(`Delete "${book.title}" permanently?`)) return;
+    if (!book || !window.confirm(t('book.deleteConfirm', { title: book.title }))) return;
     try {
       await api.deleteBook(book.id);
       navigate('/');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete book');
+      setError(err instanceof Error ? err.message : t('book.deleteError'));
     }
   };
 
   if (loading) {
     return (
       <div className="mx-auto max-w-4xl px-4 py-12 text-center text-sm text-slate-500">
-        Loading book details...
+        {t('book.loading')}
       </div>
     );
   }
@@ -96,9 +100,9 @@ export function BookDetailPage() {
   if (!book) {
     return (
       <div className="mx-auto max-w-4xl px-4 py-12 text-center">
-        <p className="text-red-600">{error || 'Book not found'}</p>
+        <p className="text-red-600">{error || t('book.notFound')}</p>
         <Link to="/" className="mt-4 inline-flex items-center gap-1.5 text-sm font-medium text-indigo-600 hover:underline">
-          <ArrowLeft className="h-4 w-4" /> Back to library
+          <ArrowLeft className="h-4 w-4" /> {t('book.backToLibrary')}
         </Link>
       </div>
     );
@@ -110,7 +114,7 @@ export function BookDetailPage() {
     <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6">
       <Link to="/" className="mb-6 inline-flex items-center gap-1.5 text-sm font-medium text-slate-600 hover:text-indigo-600">
         <ArrowLeft className="h-4 w-4" />
-        Back to library
+        {t('book.backToLibrary')}
       </Link>
 
       {error && (
@@ -137,7 +141,7 @@ export function BookDetailPage() {
             <div className="flex items-start justify-between gap-4">
               <div>
                 <h1 className="text-2xl font-bold text-slate-900">{book.title}</h1>
-                <p className="mt-1 text-base text-slate-600">by {book.author}</p>
+                <p className="mt-1 text-base text-slate-600">{t('common.byAuthor', { author: book.author })}</p>
               </div>
               {isOwner && (
                 <button
@@ -145,7 +149,7 @@ export function BookDetailPage() {
                   className="inline-flex items-center gap-1 rounded-lg border border-red-200 px-3 py-1.5 text-xs font-medium text-red-600 transition hover:bg-red-50"
                 >
                   <Trash2 className="h-3.5 w-3.5" />
-                  Delete
+                  {t('book.delete')}
                 </button>
               )}
             </div>
@@ -153,7 +157,7 @@ export function BookDetailPage() {
             <div className="mt-4 flex flex-wrap gap-4 text-xs text-slate-500">
               <span className="inline-flex items-center gap-1">
                 <User className="h-3.5 w-3.5" />
-                Uploaded by <strong className="text-slate-700">{book.uploaderUsername}</strong>
+                {t('book.uploadedBy')} <strong className="text-slate-700">{book.uploaderUsername}</strong>
               </span>
               <span className="inline-flex items-center gap-1">
                 <Calendar className="h-3.5 w-3.5" />
@@ -165,7 +169,7 @@ export function BookDetailPage() {
             </div>
 
             <p className="mt-5 whitespace-pre-line text-sm leading-relaxed text-slate-700">
-              {book.description || 'No description provided for this book.'}
+              {book.description || t('book.noDescription')}
             </p>
 
             <div className="mt-6 flex items-center gap-3 pt-4">
@@ -174,7 +178,7 @@ export function BookDetailPage() {
                 className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-indigo-700"
               >
                 <Download className="h-4 w-4" />
-                Download Book
+                {t('book.download')}
               </a>
             </div>
           </div>
@@ -185,7 +189,7 @@ export function BookDetailPage() {
       <section className="mt-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
         <h2 className="flex items-center gap-2 text-lg font-semibold text-slate-900">
           <MessageSquare className="h-5 w-5 text-indigo-600" />
-          Comments ({comments.length})
+          {t('book.commentsHeading', { count: comments.length })}
         </h2>
 
         {user ? (
@@ -194,7 +198,7 @@ export function BookDetailPage() {
               rows={3}
               value={newComment}
               onChange={(e) => setNewComment(e.target.value)}
-              placeholder="Share your thoughts or review about this book..."
+              placeholder={t('book.commentPlaceholder')}
               required
               className="w-full rounded-xl border border-slate-300 p-3 text-sm text-slate-900 outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
             />
@@ -205,26 +209,27 @@ export function BookDetailPage() {
                 className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-indigo-700 disabled:opacity-50"
               >
                 <Send className="h-4 w-4" />
-                {submitting ? 'Posting...' : 'Post Comment'}
+                {submitting ? t('book.posting') : t('book.postComment')}
               </button>
             </div>
           </form>
         ) : (
           <div className="mt-4 rounded-xl bg-slate-50 p-4 text-sm text-slate-600">
+            {t('book.signInPromptPrefix') && `${t('book.signInPromptPrefix')} `}
             <Link to="/login" className="font-medium text-indigo-600 hover:underline">
-              Sign in
+              {t('nav.signIn')}
             </Link>{' '}
-            or{' '}
+            {t('book.signInPromptOr')}{' '}
             <Link to="/register" className="font-medium text-indigo-600 hover:underline">
-              create an account
+              {t('auth.createAnAccount')}
             </Link>{' '}
-            to leave a comment on this book.
+            {t('book.signInPromptSuffix')}
           </div>
         )}
 
         <div className="mt-6 divide-y divide-slate-100">
           {comments.length === 0 ? (
-            <p className="py-6 text-center text-sm text-slate-500">No comments yet. Start the discussion!</p>
+            <p className="py-6 text-center text-sm text-slate-500">{t('book.noComments')}</p>
           ) : (
             comments.map((comment) => (
               <div key={comment.id} className="py-4">
@@ -237,7 +242,7 @@ export function BookDetailPage() {
                     <button
                       onClick={() => handleDeleteComment(comment.id)}
                       className="text-xs text-slate-400 transition hover:text-red-600"
-                      title="Delete comment"
+                      title={t('book.deleteComment')}
                     >
                       <Trash2 className="h-4 w-4" />
                     </button>

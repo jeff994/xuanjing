@@ -2,9 +2,11 @@ import { FormEvent, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { SocialLoginButtons } from '../components/SocialLoginButtons';
 import { useAuth } from '../context/AuthContext';
+import { useLanguage } from '../context/LanguageContext';
 
 export function RegisterPage() {
   const { register } = useAuth();
+  const { t } = useLanguage();
   const navigate = useNavigate();
 
   const [username, setUsername] = useState('');
@@ -21,7 +23,7 @@ export function RegisterPage() {
       await register(username, email, password);
       navigate('/', { replace: true });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Registration failed');
+      setError(err instanceof Error ? err.message : t('auth.registerFailed'));
     } finally {
       setSubmitting(false);
     }
@@ -30,8 +32,8 @@ export function RegisterPage() {
   return (
     <div className="mx-auto max-w-md px-4 py-14">
       <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
-        <h1 className="text-2xl font-bold text-slate-900">Create account</h1>
-        <p className="mt-1 text-sm text-slate-600">Join BookShelf to upload books and join discussions.</p>
+        <h1 className="text-2xl font-bold text-slate-900">{t('auth.createAccountTitle')}</h1>
+        <p className="mt-1 text-sm text-slate-600">{t('auth.createAccountSubtitle')}</p>
 
         {error && (
           <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -41,7 +43,7 @@ export function RegisterPage() {
 
         <form onSubmit={handleSubmit} className="mt-6 space-y-4">
           <div>
-            <label className="block text-sm font-medium text-slate-700">Username</label>
+            <label className="block text-sm font-medium text-slate-700">{t('auth.username')}</label>
             <input
               type="text"
               required
@@ -53,7 +55,7 @@ export function RegisterPage() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-slate-700">Email</label>
+            <label className="block text-sm font-medium text-slate-700">{t('auth.email')}</label>
             <input
               type="email"
               required
@@ -64,7 +66,7 @@ export function RegisterPage() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-slate-700">Password</label>
+            <label className="block text-sm font-medium text-slate-700">{t('auth.password')}</label>
             <input
               type="password"
               required
@@ -80,16 +82,16 @@ export function RegisterPage() {
             disabled={submitting}
             className="w-full rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-indigo-700 disabled:opacity-50"
           >
-            {submitting ? 'Creating account...' : 'Create account'}
+            {submitting ? t('auth.creatingAccount') : t('auth.createAccountTitle')}
           </button>
         </form>
 
         <SocialLoginButtons />
 
         <p className="mt-6 text-center text-sm text-slate-600">
-          Already have an account?{' '}
+          {t('auth.alreadyHaveAccount')}{' '}
           <Link to="/login" className="font-medium text-indigo-600 hover:underline">
-            Sign in
+            {t('nav.signIn')}
           </Link>
         </p>
       </div>

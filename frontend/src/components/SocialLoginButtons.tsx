@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api/client';
+import { useLanguage } from '../context/LanguageContext';
+import { TranslationKey } from '../i18n/translations';
 import { OAuthProviderInfo } from '../types';
 
 interface SocialLoginButtonsProps {
@@ -11,6 +13,12 @@ const DEFAULT_PROVIDERS: OAuthProviderInfo[] = [
   { id: 'wechat', name: 'WeChat', enabled: false },
   { id: 'facebook', name: 'Facebook', enabled: false },
 ];
+
+const PROVIDER_KEYS: Record<OAuthProviderInfo['id'], TranslationKey> = {
+  google: 'provider.google',
+  wechat: 'provider.wechat',
+  facebook: 'provider.facebook',
+};
 
 function GoogleIcon() {
   return (
@@ -61,6 +69,7 @@ function createOAuthTransactionId(): string {
 }
 
 export function SocialLoginButtons({ next = '/' }: SocialLoginButtonsProps) {
+  const { t } = useLanguage();
   const [providers, setProviders] = useState<OAuthProviderInfo[]>(DEFAULT_PROVIDERS);
   const [notice, setNotice] = useState('');
 
@@ -73,6 +82,7 @@ export function SocialLoginButtons({ next = '/' }: SocialLoginButtonsProps) {
 
   const handleClick = (provider: OAuthProviderInfo) => {
     setNotice('');
+    const providerLabel = t(PROVIDER_KEYS[provider.id]);
     if (!provider.enabled) {
       const envHint =
         provider.id === 'google'
@@ -80,7 +90,7 @@ export function SocialLoginButtons({ next = '/' }: SocialLoginButtonsProps) {
           : provider.id === 'wechat'
             ? 'WECHAT_APP_ID & WECHAT_APP_SECRET'
             : 'FACEBOOK_APP_ID & FACEBOOK_APP_SECRET';
-      setNotice(`${provider.name} login is ready — add ${envHint} in backend/.env to enable it.`);
+      setNotice(t('auth.providerNotConfigured', { provider: providerLabel, envHint }));
       return;
     }
 
@@ -108,7 +118,7 @@ export function SocialLoginButtons({ next = '/' }: SocialLoginButtonsProps) {
       <div className="relative flex items-center justify-center">
         <div className="w-full border-t border-slate-200" />
         <span className="bg-white px-3 text-xs font-medium uppercase tracking-wider text-slate-400">
-          or continue with
+          {t('auth.orContinueWith')}
         </span>
         <div className="w-full border-t border-slate-200" />
       </div>
@@ -128,7 +138,7 @@ export function SocialLoginButtons({ next = '/' }: SocialLoginButtonsProps) {
             className={`flex w-full items-center justify-center gap-2.5 rounded-xl px-4 py-2.5 text-sm font-medium shadow-sm transition ${buttonStyles[provider.id]}`}
           >
             {renderIcon(provider.id)}
-            <span>Continue with {provider.name}</span>
+            <span>{t('auth.continueWith', { provider: t(PROVIDER_KEYS[provider.id]) })}</span>
           </button>
         ))}
       </div>

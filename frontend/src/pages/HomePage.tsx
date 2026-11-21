@@ -4,10 +4,12 @@ import { Link } from 'react-router-dom';
 import { api } from '../api/client';
 import { BookCard } from '../components/BookCard';
 import { useAuth } from '../context/AuthContext';
+import { useLanguage } from '../context/LanguageContext';
 import { Book } from '../types';
 
 export function HomePage() {
   const { user } = useAuth();
+  const { t } = useLanguage();
   const [books, setBooks] = useState<Book[]>([]);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
@@ -20,7 +22,7 @@ export function HomePage() {
       const res = await api.listBooks(query);
       setBooks(res.books);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load books');
+      setError(err instanceof Error ? err.message : t('home.loadError'));
     } finally {
       setLoading(false);
     }
@@ -39,10 +41,8 @@ export function HomePage() {
     <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
       <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-slate-900">Book Library</h1>
-          <p className="mt-1 text-sm text-slate-600">
-            Browse, download, upload books, and join discussions with the community.
-          </p>
+          <h1 className="text-3xl font-bold tracking-tight text-slate-900">{t('home.title')}</h1>
+          <p className="mt-1 text-sm text-slate-600">{t('home.subtitle')}</p>
         </div>
 
         <form onSubmit={handleSearch} className="flex w-full max-w-md items-center gap-2">
@@ -52,7 +52,7 @@ export function HomePage() {
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search by title, author, or description..."
+              placeholder={t('home.searchPlaceholder')}
               className="w-full rounded-xl border border-slate-300 bg-white py-2 pl-9 pr-3 text-sm text-slate-900 shadow-sm outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
             />
           </div>
@@ -60,7 +60,7 @@ export function HomePage() {
             type="submit"
             className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800"
           >
-            Search
+            {t('home.search')}
           </button>
         </form>
       </div>
@@ -80,11 +80,9 @@ export function HomePage() {
       ) : books.length === 0 ? (
         <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-16 text-center">
           <BookOpen className="h-12 w-12 text-slate-300" />
-          <h2 className="mt-4 text-lg font-semibold text-slate-900">No books found</h2>
+          <h2 className="mt-4 text-lg font-semibold text-slate-900">{t('home.emptyTitle')}</h2>
           <p className="mt-1 max-w-sm text-sm text-slate-500">
-            {search
-              ? 'Try a different search term or clear your filter.'
-              : 'Be the first to share a book with the community.'}
+            {search ? t('home.emptySearch') : t('home.emptyDefault')}
           </p>
           <div className="mt-6 flex gap-3">
             {search && (
@@ -95,7 +93,7 @@ export function HomePage() {
                 }}
                 className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
               >
-                Clear search
+                {t('home.clearSearch')}
               </button>
             )}
             <Link
@@ -103,7 +101,7 @@ export function HomePage() {
               className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
             >
               <Upload className="h-4 w-4" />
-              {user ? 'Upload a Book' : 'Sign in to Upload'}
+              {user ? t('home.uploadCta') : t('home.signInToUpload')}
             </Link>
           </div>
         </div>
